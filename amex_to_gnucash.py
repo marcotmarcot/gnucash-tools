@@ -13,13 +13,14 @@ DEFAULT_EXPENSE_ACCOUNT = "Não classificado"
 # --- Account Categorization Rules ---
 # Keywords are case-insensitive.
 ACCOUNT_RULES = {
-    "Total:Ativo:Conta corrente:Monzo": ["PAYMENT RECEIVED"],
-    "Despesas:Vestuário": ["UNIQLO"],
-    "Despesas:Celular", ["SMARTY"],
-    "Despesas:Saúde": ["BOOTS", "MASSAGE", "REDWOOD PHARMACY"],
+    "Despesas:Cachorro": ["GROOMING"],
+    "Despesas:Celular": ["SMARTY"],
+    "Despesas:Diversão": ["YOUTUBEPREMIUM"],
     "Despesas:Educação": ["RHODES AVENUE", "BREEZY CLUB"],
-    "Despesas:Supermercado": ["PACTCOFFEE", "WAITROSE", "SAINSBURY", "OCADO", "ASTRID BAKERY", "MORRISONS"],
-    "Despesas:Comida": ["DELIVEROO"] # This is a special case handled separately
+    "Despesas:Saúde": ["BOOTS", "MASSAGE", "PHARMACY", "FUSSY", "SUNDAYS INSURANCE"],
+    "Despesas:Supermercado": ["PACTCOFFEE", "WAITROSE", "SAINSBURY", "OCADO", "ASTRID BAKERY", "MORRISONS", "ASDA", "GAIL", "BRAZILIAN CENTRE"],
+    "Despesas:Vestuário": ["UNIQLO", "HAIR-TRIBE"],
+    "Total:Ativo:Conta corrente:Monzo": ["PAYMENT RECEIVED"],
 }
 # --- End of Configuration ---
 
@@ -68,7 +69,7 @@ def parse_deliveroo_orders(deliveroo_html_path):
             amount_str, date_str = [part.strip() for part in details_text.split('•')]
             
             # Clean and convert amount to a Decimal for precision
-            amount = Decimal(amount_str.replace('£', '').replace('\xa0', '').strip())
+            amount = Decimal(amount_str.replace('£', '').replace('€', '').replace('\xa0', '').strip())
             
             # Parse date
             date_obj = datetime.strptime(date_str, '%d %B %Y').date()
@@ -91,10 +92,10 @@ def get_account_and_description(description, date_obj, amount_value, deliveroo_o
     """
     Determines the correct expense account and description based on the rules.
     """
-    upper_description = description.upper()
+    account = DEFAULT_EXPENSE_ACCOUNT
     
     # Special handling for Deliveroo first as it's more specific
-    if "DELIVEROO" in upper_description:
+    if "DELIVEROO" in description.upper():
         # Use two decimal places for matching amounts
         amount_decimal = Decimal(str(amount_value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         lookup_key = (date_obj.date(), amount_decimal)
@@ -102,17 +103,18 @@ def get_account_and_description(description, date_obj, amount_value, deliveroo_o
         if lookup_key in deliveroo_orders and deliveroo_orders[lookup_key]:
             # Pop the first available restaurant for this key to handle multiple identical orders on the same day
             restaurant_name = deliveroo_orders[lookup_key].pop(0)
-            return f"Deliveroo: {restaurant_name}", "Despesas:Comida"
+            description = f"Deliveroo: {restaurant_name}"
+            account = "Despesas:Comida"
         else:
             # Fallback if no match is found
-            return description, "Despesas:Comida"
+            account = "Despesas:Comida"
             
     # Apply other rules
-    for account, keywords in ACCOUNT_RULES.items():
-        if any(keyword in upper_description for keyword in keywords):
-            return description, account
+    for rules_account, keywords in ACCOUNT_RULES.items():
+        if any(keyword in description.upper() for keyword in keywords):
+            return description, rules_account
 
-    return description, DEFAULT_EXPENSE_ACCOUNT
+    return description, account
 
 def process_html_file(amex_path, deliveroo_path, output_path):
     """
